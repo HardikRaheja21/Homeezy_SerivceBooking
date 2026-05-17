@@ -75,18 +75,16 @@ function BookingForm() {
     fetchServices();
   }, [isAuthenticated, router, searchParams]);
 
-  async function onSubmit(data: BookingFormValues) {
-    if (step < 3) {
-      // Move to next step if validation passes
-      const fieldsToValidate = step === 1 
-        ? ['service_category', 'address', 'problem_description'] 
-        : ['preferred_date', 'preferred_time'];
-        
-      const isValid = await form.trigger(fieldsToValidate as any);
-      if (isValid) setStep(step + 1);
-      return;
-    }
+  async function handleContinue() {
+    const fieldsToValidate = step === 1 
+      ? ['service_category', 'address', 'problem_description'] 
+      : ['preferred_date', 'preferred_time'];
+      
+    const isValid = await form.trigger(fieldsToValidate as any);
+    if (isValid) setStep(step + 1);
+  }
 
+  async function onSubmit(data: BookingFormValues) {
     // Final Submit
     setIsLoading(true);
     try {
@@ -362,20 +360,33 @@ function BookingForm() {
                 </Button>
               )}
 
-              <Button type="submit" size="lg" disabled={isLoading} className={`rounded-xl shadow-sm ${step === 3 ? "bg-emerald-600 hover:bg-emerald-700 w-full sm:w-auto px-8" : "w-full sm:w-auto px-8"}`}>
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Processing...
-                  </>
-                ) : step < 3 ? (
-                  <>
-                    Continue <ArrowRight className="ml-2 h-4 w-4" />
-                  </>
-                ) : (
-                  'Confirm Booking'
-                )}
-              </Button>
+              {step < 3 ? (
+                <Button 
+                  type="button" 
+                  size="lg" 
+                  disabled={isLoading} 
+                  onClick={handleContinue}
+                  className="rounded-xl shadow-sm w-full sm:w-auto px-8"
+                >
+                  Continue <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              ) : (
+                <Button 
+                  type="submit" 
+                  size="lg" 
+                  disabled={isLoading} 
+                  className="rounded-xl shadow-sm bg-emerald-600 hover:bg-emerald-700 w-full sm:w-auto px-8"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    'Confirm Booking'
+                  )}
+                </Button>
+              )}
             </div>
           </form>
         </Form>

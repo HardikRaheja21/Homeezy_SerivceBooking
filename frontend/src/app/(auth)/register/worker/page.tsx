@@ -76,6 +76,11 @@ export default function RegisterWorkerPage() {
       const payload = {
         ...data,
         skills: data.skills.split(',').map((s) => s.trim()).filter(Boolean),
+        bank_name: 'Pending',
+        account_number: '0000000000',
+        ifsc_code: 'PEND000000',
+        emergency_contact_name: 'Pending',
+        emergency_contact_phone: '0000000000',
       };
 
       await apiClient.post('/api/v1/auth/register/worker', payload);
