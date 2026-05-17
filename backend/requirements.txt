@@ -21,3 +21,4 @@ openai==1.3.5        # AI features
 email-validator==2.2.0
 sentry-sdk==2.0.1
 setuptools==80.8.0
+cloudinary==1.41.0
