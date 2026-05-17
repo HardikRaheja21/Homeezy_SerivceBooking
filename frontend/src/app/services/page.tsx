@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Search, MapPin, Star, Filter } from 'lucide-react';
+import { Search, Loader2 } from 'lucide-react';
 
 import { apiClient } from '@/lib/api/client';
 import { ServiceCategory } from '@/types';
@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 
-export default function ServicesPage() {
+function ServicesContent() {
   const searchParams = useSearchParams();
   const initialCategory = searchParams.get('category') || '';
   
@@ -24,9 +24,7 @@ export default function ServicesPage() {
     async function fetchServices() {
       try {
         setIsLoading(true);
-        // Assuming backend has /api/v1/services endpoint (it does per stabilization tasks)
         const response = await apiClient.get('/api/v1/services');
-        // Backend returns an array or PaginatedResponse
         const data = response.data?.data?.items || response.data?.items || response.data || [];
         setServices(Array.isArray(data) ? data : []);
       } catch (error) {
@@ -135,5 +133,17 @@ export default function ServicesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ServicesPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex justify-center items-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+      </div>
+    }>
+      <ServicesContent />
+    </Suspense>
   );
 }
