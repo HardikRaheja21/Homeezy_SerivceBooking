@@ -13,7 +13,7 @@ python-dotenv==1.0.0
 
 # Additional
 requests==2.31.0
-pillow==10.1.0
+Pillow==10.3.0
 boto3==1.29.7        # AWS S3
 stripe==7.4.0        # Payment
 razorpay==1.4.1      # Payment
