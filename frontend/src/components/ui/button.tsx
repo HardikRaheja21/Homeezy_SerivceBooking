@@ -1,6 +1,5 @@
-import { Button as ButtonPrimitive } from "@base-ui/react/button"
+import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
-
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
@@ -40,33 +39,34 @@ const buttonVariants = cva(
   }
 )
 
-import * as React from "react"
-
-function Button({
-  className,
-  variant = "default",
-  size = "default",
-  asChild = false,
-  ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants> & { asChild?: boolean }) {
-  if (asChild && React.isValidElement(props.children)) {
-    const child = props.children;
-    // Extract children from props to avoid passing it down again incorrectly
-    const { children, ...restProps } = props;
-    return React.cloneElement(child, {
-      ...restProps,
-      ...child.props, // Keep child's own props
-      className: cn(buttonVariants({ variant, size, className }), child.props.className),
-    } as React.HTMLAttributes<HTMLElement>);
-  }
-
-  return (
-    <ButtonPrimitive
-      data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
-      {...props}
-    />
-  )
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean
 }
 
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    if (asChild && React.isValidElement(props.children)) {
+      const child = props.children;
+      const { children, ...restProps } = props;
+      return React.cloneElement(child, {
+        ...restProps,
+        ...child.props, // Keep child's own props
+        className: cn(buttonVariants({ variant, size, className }), child.props.className),
+        ref,
+      } as React.HTMLAttributes<HTMLElement> & { ref?: React.Ref<any> });
+    }
+
+    return (
+      <button
+        ref={ref}
+        className={cn(buttonVariants({ variant, size, className }))}
+        {...props}
+      />
+    )
+  }
+)
+
+Button.displayName = "Button"
 export { Button, buttonVariants }
