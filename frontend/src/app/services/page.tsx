@@ -24,7 +24,7 @@ function ServicesContent() {
     async function fetchServices() {
       try {
         setIsLoading(true);
-        const response = await apiClient.get('/api/v1/services');
+        const response = await apiClient.get('/api/v1/services/catalog');
         const data = response.data?.data?.items || response.data?.items || response.data || [];
         setServices(Array.isArray(data) ? data : []);
       } catch (error) {
