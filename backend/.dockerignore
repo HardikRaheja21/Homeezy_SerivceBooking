@@ -1,0 +1,43 @@
+# .dockerignore
+# Exclude files that should never go into the Docker image
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+venv/
+env/
+.env
+.env.*
+!.env.example
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+*.db
+homeezy_test.db
+
+# Logs
+logs/
+*.log
+
+# Version control
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Alembic compiled cache
+alembic/__pycache__/

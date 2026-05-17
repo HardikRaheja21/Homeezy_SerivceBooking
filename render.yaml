@@ -1,0 +1,64 @@
+services:
+  # ----------------------------------------
+  # PostgreSQL Database (Optional if using Neon)
+  # ----------------------------------------
+  # If you are using a managed DB like Neon, remove this section
+  # and set the DATABASE_URL environment variable in the API service.
+  
+  # ----------------------------------------
+  # Redis Infrastructure (Optional if using Upstash)
+  # ----------------------------------------
+  # If using Upstash, remove this and set REDIS_URL.
+  - type: redis
+    name: homeezy-redis
+    ipAllowList: [] # internal only
+    plan: free
+    maxmemoryPolicy: allkeys-lru
+
+  # ----------------------------------------
+  # FastAPI Backend
+  # ----------------------------------------
+  - type: web
+    name: homeezy-api
+    env: python
+    buildCommand: "cd backend && pip install -r requirements.txt"
+    startCommand: "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: homeezy-redis
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ENVIRONMENT
+        value: production
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: CLOUDINARY_URL
+        sync: false
+
+  # ----------------------------------------
+  # Celery Worker
+  # ----------------------------------------
+  - type: worker
+    name: homeezy-celery-worker
+    env: python
+    buildCommand: "cd backend && pip install -r requirements.txt"
+    startCommand: "cd backend && celery -A app.core.celery_app worker --loglevel=info"
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: homeezy-redis
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ENVIRONMENT
+        value: production
+      - key: CLOUDINARY_URL
+        sync: false
