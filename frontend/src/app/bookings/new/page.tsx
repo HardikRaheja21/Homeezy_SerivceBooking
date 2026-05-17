@@ -107,16 +107,27 @@ function BookingForm() {
 
       const payload = {
         service_category: data.service_category,
-        address: data.address,
-        problem_description: data.problem_description,
+        service_description: data.problem_description,
+        skills_required: ["General"],
+        service_address: { "full_address": data.address },
         preferred_date: targetDate.toISOString(),
+        preferred_time_slot: data.preferred_time,
+        estimated_duration_hours: 2.0,
       };
 
-      await apiClient.post('/api/v1/bookings', payload);
+      await apiClient.post('/api/v1/bookings/create', payload);
       toast.success('Booking created successfully!');
       router.push('/dashboard/customer');
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to create booking');
+      let msg = 'Failed to create booking';
+      if (error.response?.data?.detail) {
+        msg = Array.isArray(error.response.data.detail) 
+          ? error.response.data.detail.map((e:any) => `${e.loc[e.loc.length-1]}: ${e.msg}`).join(', ')
+          : error.response.data.detail;
+      } else if (error.response?.data?.message) {
+        msg = error.response.data.message;
+      }
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }
