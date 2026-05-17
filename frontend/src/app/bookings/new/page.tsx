@@ -75,13 +75,19 @@ function BookingForm() {
     fetchServices();
   }, [isAuthenticated, router, searchParams]);
 
-  async function handleContinue() {
+  async function handleContinue(e: React.MouseEvent) {
+    e.preventDefault();
     const fieldsToValidate = step === 1 
       ? ['service_category', 'address', 'problem_description'] 
       : ['preferred_date', 'preferred_time'];
       
     const isValid = await form.trigger(fieldsToValidate as any);
-    if (isValid) setStep(step + 1);
+    if (isValid) {
+      setStep(step + 1);
+    } else {
+      const errors = Object.keys(form.formState.errors);
+      toast.error(`Please fill out all required fields correctly. Errors in: ${errors.join(', ')}`);
+    }
   }
 
   async function onSubmit(data: BookingFormValues) {
