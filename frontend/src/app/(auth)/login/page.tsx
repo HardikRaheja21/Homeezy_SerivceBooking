@@ -24,7 +24,7 @@ import { apiClient } from '@/lib/api/client';
 import { useAuth } from '@/store/useAuth';
 
 const loginSchema = z.object({
-  email: z.string().email('Please enter a valid email address'),
+  email: z.string().email('Please enter a valid email address').trim().toLowerCase(),
   password: z.string().min(1, 'Password is required'),
 });
 

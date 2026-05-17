@@ -25,7 +25,7 @@ import { useAuth } from '@/store/useAuth';
 
 const registerSchema = z.object({
   full_name: z.string().min(2, 'Name must be at least 2 characters'),
-  email: z.string().email('Please enter a valid email address'),
+  email: z.string().email('Please enter a valid email address').trim().toLowerCase(),
   phone: z.string().min(10, 'Please enter a valid phone number'),
   password: z
     .string()
