@@ -64,7 +64,8 @@ export default function LoginPage() {
         }
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Invalid email or password');
+      const msg = error.response?.data?.detail || error.response?.data?.message || 'Invalid email or password';
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }
