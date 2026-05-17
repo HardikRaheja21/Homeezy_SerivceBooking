@@ -120,6 +120,7 @@ function BookingForm() {
 
   const currentService = services.find(s => s.slug === form.watch('service_category') || s.name === form.watch('service_category'));
 
+  return (
     <div className="w-full max-w-3xl mx-auto">
       {/* Premium Header */}
       <div className="mb-8 text-center">
