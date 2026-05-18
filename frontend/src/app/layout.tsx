@@ -4,6 +4,7 @@ import './globals.css';
 import { Toaster } from '@/components/ui/sonner';
 import { Navbar } from '@/components/layout/Navbar';
 import { ChatWidget } from '@/components/layout/ChatWidget';
+import { AuthProvider } from '@/components/providers/AuthProvider';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 
@@ -55,8 +56,10 @@ export default function RootLayout({
     <html lang="en" className={`${inter.variable} font-sans h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <Navbar />
-        <main className="flex-1 flex flex-col">{children}</main>
-        <ChatWidget />
+        <AuthProvider>
+          <main className="flex-1 flex flex-col">{children}</main>
+          <ChatWidget />
+        </AuthProvider>
         <Toaster position="top-center" richColors />
       </body>
     </html>

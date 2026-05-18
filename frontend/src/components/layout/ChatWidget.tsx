@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { apiClient } from '@/lib/api/client';
+import { toast } from 'sonner';
+import { useAuth } from '@/store/useAuth';
 
 export function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
@@ -18,6 +19,7 @@ export function ChatWidget() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { accessToken, isAuthenticated } = useAuth();
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -27,6 +29,11 @@ export function ChatWidget() {
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
+
+    if (!isAuthenticated || !accessToken) {
+      toast.error('Please sign in to use Homeezy AI chat.');
+      return;
+    }
     
     const userMessage = { role: 'user', content: input };
     setMessages(prev => [...prev, userMessage]);
@@ -36,11 +43,12 @@ export function ChatWidget() {
     try {
       setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
       
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/ai/chat/stream`, {
+      const apiBase = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await fetch(`${apiBase}/api/v1/ai/chat/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${document.cookie.split('auth_token=')[1]?.split(';')[0] || ''}`
+          'Authorization': `Bearer ${accessToken || ''}`
         },
         body: JSON.stringify({
           message: userMessage.content,
@@ -48,7 +56,12 @@ export function ChatWidget() {
         })
       });
 
-      if (!response.ok) throw new Error('Network response was not ok');
+      if (!response.ok) {
+        if (response.status === 401) throw new Error('Please sign in to use AI chat.');
+        if (response.status === 429) throw new Error('AI rate limit reached. Try again later.');
+        if (response.status === 503) throw new Error('AI service is temporarily unavailable.');
+        throw new Error('Could not reach AI service.');
+      }
       if (!response.body) throw new Error('ReadableStream not supported');
 
       const reader = response.body.getReader();
@@ -75,10 +88,11 @@ export function ChatWidget() {
         }
       }
     } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Sorry, I could not connect to the AI. Please try again.';
       console.error('Chat error:', error);
       setMessages(prev => {
         const newMessages = [...prev];
-        newMessages[newMessages.length - 1].content = 'Sorry, I encountered an error connecting to the AI. Please try again.';
+        newMessages[newMessages.length - 1].content = msg;
         return newMessages;
       });
     } finally {

@@ -24,11 +24,11 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
         "full_name": current_user.full_name,
         "email": current_user.email,
         "phone": current_user.phone,
-        "role": current_user.role,
+        "role": current_user.role.value,
         "profile_photo": current_user.profile_photo,
         "city": current_user.city,
         "area": current_user.area,
-        "account_status": current_user.account_status,
+        "account_status": current_user.account_status.value,
         "email_verified": current_user.email_verified,
         "phone_verified": current_user.phone_verified
     }

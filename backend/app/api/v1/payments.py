@@ -15,6 +15,18 @@ router = APIRouter()
 payment_service = PaymentService()
 
 
+@router.get("/status")
+async def payment_gateway_status():
+    """Report whether payment gateways are configured (no auth required)."""
+    razorpay_ok = bool(settings.RAZORPAY_KEY_ID and settings.RAZORPAY_KEY_SECRET)
+    stripe_ok = bool(settings.STRIPE_SECRET_KEY)
+    return {
+        "razorpay_configured": razorpay_ok,
+        "stripe_configured": stripe_ok,
+        "payments_available": razorpay_ok or stripe_ok,
+    }
+
+
 class InitiatePaymentRequest(BaseModel):
     booking_id: str
     payment_method: PaymentMethod
@@ -25,6 +37,39 @@ class VerifyPaymentRequest(BaseModel):
     gateway_order_id: str
     gateway_transaction_id: str
     signature: str
+
+
+@router.get("/booking/{booking_id}")
+async def get_booking_payment(
+    booking_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.customer_id != current_user.id and current_user.role.value != "admin":
+        if booking.worker_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+
+    payment = db.query(Payment).filter(Payment.booking_id == booking_id).first()
+    pay_status = (
+        booking.payment_status.value
+        if hasattr(booking.payment_status, "value")
+        else booking.payment_status
+    )
+    return {
+        "booking_id": booking_id,
+        "payment_status": pay_status,
+        "amount": booking.final_price or booking.estimated_price,
+        "payment_record": {
+            "id": payment.id,
+            "status": payment.status,
+            "gateway_order_id": payment.gateway_order_id,
+        }
+        if payment
+        else None,
+    }
 
 
 @router.post("/initiate")

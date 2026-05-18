@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { apiClient } from '@/lib/api/client';
+import { apiClient, getApiErrorMessage } from '@/lib/api/client';
 import { useAuth } from '@/store/useAuth';
 
 const loginSchema = z.object({
@@ -63,9 +63,8 @@ export default function LoginPage() {
           router.push('/dashboard');
         }
       }
-    } catch (error: any) {
-      const msg = error.response?.data?.detail || error.response?.data?.message || 'Invalid email or password';
-      toast.error(msg);
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, 'Invalid email or password'));
     } finally {
       setIsLoading(false);
     }

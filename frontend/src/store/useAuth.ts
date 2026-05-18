@@ -9,7 +9,7 @@ export interface User {
   full_name: string;
   role: UserRole;
   phone?: string;
-  account_status?: string;
+  account_status?: string; // active | pending | blocked | suspended
   profile_photo?: string | null;
 }
 

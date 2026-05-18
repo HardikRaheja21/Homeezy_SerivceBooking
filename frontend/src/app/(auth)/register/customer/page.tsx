@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { apiClient } from '@/lib/api/client';
+import { apiClient, getApiErrorMessage } from '@/lib/api/client';
 import { useAuth } from '@/store/useAuth';
 
 const registerSchema = z.object({
@@ -63,21 +63,27 @@ export default function RegisterCustomerPage() {
     setIsLoading(true);
     try {
       // 1. Register
-      await apiClient.post('/api/v1/auth/register/customer', data);
-      toast.success('Registration successful! Logging you in...');
-      
-      // 2. Auto-login
-      const loginRes = await apiClient.post('/api/v1/auth/login', {
-        email: data.email,
-        password: data.password,
-      });
+      const regRes = await apiClient.post('/api/v1/auth/register/customer', data);
 
-      if (loginRes.data?.access_token) {
-        setAuth(loginRes.data.user, loginRes.data.access_token, loginRes.data.refresh_token);
-        router.push('/dashboard/customer');
+      if (regRes.data?.dev_mode) {
+        toast.success('Account created! Logging you in...');
+        const loginRes = await apiClient.post('/api/v1/auth/login', {
+          email: data.email,
+          password: data.password,
+        });
+        if (loginRes.data?.access_token) {
+          setAuth(loginRes.data.user, loginRes.data.access_token, loginRes.data.refresh_token);
+          router.push('/dashboard/customer');
+          return;
+        }
       }
-    } catch (error: any) {
-      toast.error(error.response?.data?.detail || error.response?.data?.message || 'Registration failed. Please try again.');
+
+      toast.success('Registration successful! Please verify your email and phone.');
+      router.push(
+        `/verify?email=${encodeURIComponent(data.email)}&phone=${encodeURIComponent(data.phone)}`
+      );
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, 'Registration failed. Please try again.'));
     } finally {
       setIsLoading(false);
     }

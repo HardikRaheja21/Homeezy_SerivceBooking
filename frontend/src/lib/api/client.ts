@@ -1,12 +1,32 @@
 import axios from 'axios';
 import { useAuth } from '@/store/useAuth';
 
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+
 export const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
+  baseURL: API_BASE,
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
+/** Extract a human-readable error message from API error responses */
+export function getApiErrorMessage(error: unknown, fallback = 'Something went wrong'): string {
+  const err = error as { response?: { data?: { detail?: unknown; message?: string } } };
+  const detail = err.response?.data?.detail;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((e: { msg?: string; loc?: unknown[] }) =>
+        e.loc?.length ? `${e.loc[e.loc.length - 1]}: ${e.msg}` : e.msg
+      )
+      .filter(Boolean)
+      .join(', ');
+  }
+  if (err.response?.data?.message) return err.response.data.message;
+  return fallback;
+}
 
 apiClient.interceptors.request.use(
   (config) => {

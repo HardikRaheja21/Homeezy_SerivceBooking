@@ -63,6 +63,7 @@ class Booking(Base):
     cancellation_reason = Column(Text, nullable=True)
     special_instructions = Column(Text, nullable=True)
     materials_required = Column(JSON, default=list)
+    customer_attachments = Column(JSON, default=list)
     
     # AI Features
     ai_recommended_workers = Column(JSON, default=list)

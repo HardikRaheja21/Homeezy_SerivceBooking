@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import { Calendar, Clock, MapPin, AlertCircle, Wrench, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
@@ -8,6 +8,12 @@ import Link from 'next/link';
 
 import { apiClient } from '@/lib/api/client';
 import { useAuth } from '@/store/useAuth';
+import {
+  BookingListItem,
+  extractListItems,
+  mapBookingItem,
+  normalizeBookingStatus,
+} from '@/lib/booking-utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -15,38 +21,53 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { useWebSocket } from '@/lib/hooks/useWebSocket';
+import { useDashboardSync } from '@/lib/hooks/useDashboardSync';
 
 export default function CustomerDashboard() {
   const { user } = useAuth();
-  const [bookings, setBookings] = useState<any[]>([]);
+  const [bookings, setBookings] = useState<BookingListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
   // Initialize websocket connection
   useWebSocket();
 
-  useEffect(() => {
-    async function fetchDashboardData() {
-      try {
-        const response = await apiClient.get('/api/v1/bookings', { params: { limit: 10 } });
-        const items = response.data?.data?.items || response.data?.items || response.data || [];
-        setBookings(Array.isArray(items) ? items : []);
-      } catch (error) {
-        console.error('Failed to load dashboard data', error);
-      } finally {
-        setIsLoading(false);
-      }
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      const response = await apiClient.get('/api/v1/bookings/my-bookings', { params: { page_size: 10 } });
+      const items = extractListItems<Record<string, unknown>>(response.data).map(mapBookingItem);
+      setBookings(items);
+    } catch (error) {
+      console.error('Failed to load dashboard data', error);
+      toast.error('Could not load your bookings');
+    } finally {
+      setIsLoading(false);
     }
-    fetchDashboardData();
   }, []);
 
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
+
+  useDashboardSync(fetchDashboardData);
+
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'REQUESTED': return <Badge variant="secondary" className="bg-amber-100 text-amber-800 hover:bg-amber-100">Requested</Badge>;
-      case 'ASSIGNED': return <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-100">Assigned</Badge>;
-      case 'IN_PROGRESS': return <Badge variant="secondary" className="bg-purple-100 text-purple-800 hover:bg-purple-100">In Progress</Badge>;
-      case 'COMPLETED': return <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Completed</Badge>;
-      case 'CANCELLED': return <Badge variant="destructive">Cancelled</Badge>;
-      default: return <Badge variant="outline">{status}</Badge>;
+    switch (normalizeBookingStatus(status)) {
+      case 'requested':
+        return <Badge variant="secondary" className="bg-amber-100 text-amber-800 hover:bg-amber-100">Requested</Badge>;
+      case 'accepted':
+        return <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-100">Accepted</Badge>;
+      case 'worker_enroute':
+        return <Badge variant="secondary" className="bg-sky-100 text-sky-800 hover:bg-sky-100">En Route</Badge>;
+      case 'in_progress':
+        return <Badge variant="secondary" className="bg-purple-100 text-purple-800 hover:bg-purple-100">In Progress</Badge>;
+      case 'completed':
+        return <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Completed</Badge>;
+      case 'cancelled':
+        return <Badge variant="destructive">Cancelled</Badge>;
+      case 'disputed':
+        return <Badge variant="destructive" className="bg-red-100 text-red-800 hover:bg-red-100">Disputed</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
     }
   };
 
@@ -116,8 +137,10 @@ export default function CustomerDashboard() {
                           <p className="text-xs text-slate-500 uppercase tracking-wider font-medium mb-1">Estimated</p>
                           <p className="font-bold text-slate-900 text-lg">${booking.estimated_price?.toFixed(2) || '--'}</p>
                         </div>
-                        <Button variant="outline" size="sm" className="rounded-xl group-hover:bg-emerald-50 group-hover:text-emerald-700 group-hover:border-emerald-200 transition-colors">
-                          View Details <ChevronRight className="h-4 w-4 ml-1" />
+                        <Button variant="outline" size="sm" className="rounded-xl group-hover:bg-emerald-50 group-hover:text-emerald-700 group-hover:border-emerald-200 transition-colors" asChild>
+                          <Link href={`/bookings/${booking.id}`}>
+                            View Details <ChevronRight className="h-4 w-4 ml-1" />
+                          </Link>
                         </Button>
                       </div>
                     </div>

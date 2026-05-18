@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 const protectedRoutes = ['/dashboard', '/bookings', '/profile'];
-const authRoutes = ['/login', '/register'];
+const authRoutes = ['/login', '/register', '/verify'];
 
 export function middleware(request: NextRequest) {
   const isAuthenticated = request.cookies.get('homeezy_auth')?.value === 'true';
@@ -26,14 +26,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
-  // Role-based routing for dashboards
-  if (isAuthenticated && request.nextUrl.pathname === '/dashboard') {
-    if (userRole === 'customer') {
-      return NextResponse.rewrite(new URL('/dashboard/customer', request.url));
-    } else if (userRole === 'worker') {
-      return NextResponse.rewrite(new URL('/dashboard/worker', request.url));
-    } else if (userRole === 'admin') {
-      return NextResponse.rewrite(new URL('/dashboard/admin', request.url));
+  // Role-based access for dashboard sub-routes
+  if (isAuthenticated && request.nextUrl.pathname.startsWith('/dashboard/')) {
+    const segment = request.nextUrl.pathname.split('/')[2];
+    if (segment && segment !== userRole && segment !== 'page') {
+      return NextResponse.redirect(new URL(`/dashboard/${userRole || 'customer'}`, request.url));
     }
   }
 

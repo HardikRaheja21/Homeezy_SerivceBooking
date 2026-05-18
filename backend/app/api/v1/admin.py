@@ -80,7 +80,11 @@ async def get_pending_workers(
             "experience_years": w.experience_years,
             "government_id_type": w.government_id_type,
             "government_id_number": w.government_id_number,
-            "created_at": w.user.created_at
+            "government_id_document": w.government_id_document,
+            "address_proof_document": w.address_proof_document,
+            "police_verification_document": w.police_verification_document,
+            "profile_photo": w.user.profile_photo,
+            "created_at": w.user.created_at,
         }
         for w in workers
     ]
@@ -165,7 +169,7 @@ async def get_recent_bookings(
             "customer_name": b.customer.full_name,
             "worker_name": b.worker.full_name if b.worker else "Pending",
             "service_category": b.service_category,
-            "status": b.status,
+            "status": b.status.value if hasattr(b.status, "value") else b.status,
             "estimated_price": b.estimated_price,
             "requested_at": b.requested_at,
             "fraud_score": b.fraud_detection_score

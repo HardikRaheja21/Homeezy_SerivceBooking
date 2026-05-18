@@ -17,7 +17,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { apiClient } from '@/lib/api/client';
+import { apiClient, getApiErrorMessage } from '@/lib/api/client';
+import { uploadBookingAttachment, validateImageFile, fetchUploadStatus } from '@/lib/uploads';
 import { useAuth } from '@/store/useAuth';
 import { cn } from '@/lib/utils';
 
@@ -46,6 +47,7 @@ function BookingForm() {
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [services, setServices] = useState<any[]>([]);
+  const [pendingPhotos, setPendingPhotos] = useState<File[]>([]);
 
   const form = useForm<BookingFormValues>({
     resolver: zodResolver(bookingSchema),
@@ -108,16 +110,33 @@ function BookingForm() {
       const payload = {
         service_category: data.service_category,
         service_description: data.problem_description,
-        skills_required: ["General"],
-        service_address: { "full_address": data.address },
+        skills_required: ['General'],
+        service_address: { full_address: data.address },
         preferred_date: targetDate.toISOString(),
         preferred_time_slot: data.preferred_time,
         estimated_duration_hours: 2.0,
+        customer_attachments: [] as string[],
       };
 
-      await apiClient.post('/api/v1/bookings/create', payload);
+      const createRes = await apiClient.post('/api/v1/bookings/create', payload);
+      const newBookingId = createRes.data?.booking_id as string | undefined;
+
+      if (newBookingId && pendingPhotos.length > 0) {
+        const uploadStatus = await fetchUploadStatus();
+        if (uploadStatus.uploads_available) {
+          for (const file of pendingPhotos) {
+            try {
+              await uploadBookingAttachment(newBookingId, file);
+            } catch {
+              toast.error('Some photos could not be uploaded');
+              break;
+            }
+          }
+        }
+      }
+
       toast.success('Booking created successfully!');
-      router.push('/dashboard/customer');
+      router.push(newBookingId ? `/bookings/${newBookingId}` : '/dashboard/customer');
     } catch (error: any) {
       let msg = 'Failed to create booking';
       if (error.response?.data?.detail) {
@@ -238,6 +257,38 @@ function BookingForm() {
                     </FormItem>
                   )}
                 />
+
+                <FormItem>
+                  <FormLabel>Photos (optional)</FormLabel>
+                  <p className="text-xs text-muted-foreground mb-2">Add up to 5 images of the issue</p>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {pendingPhotos.map((f, i) => (
+                      <span key={i} className="text-xs bg-slate-100 px-2 py-1 rounded-md truncate max-w-[140px]">
+                        {f.name}
+                      </span>
+                    ))}
+                  </div>
+                  <Input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    multiple
+                    disabled={pendingPhotos.length >= 5}
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || []);
+                      const valid: File[] = [];
+                      for (const f of files) {
+                        const err = validateImageFile(f);
+                        if (err) {
+                          toast.error(err);
+                          continue;
+                        }
+                        valid.push(f);
+                      }
+                      setPendingPhotos((prev) => [...prev, ...valid].slice(0, 5));
+                      e.target.value = '';
+                    }}
+                  />
+                </FormItem>
               </div>
             )}
 

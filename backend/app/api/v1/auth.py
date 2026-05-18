@@ -267,6 +267,40 @@ async def register_worker(
         "phone": user.phone
     }
 
+class ResendOTPRequest(BaseModel):
+    identifier: str
+    type: str  # email or phone
+
+
+@router.post("/resend-otp")
+async def resend_otp(
+    data: ResendOTPRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    if data.type not in ("email", "phone"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Type must be 'email' or 'phone'",
+        )
+
+    if data.type == "email":
+        user = db.query(User).filter(User.email == data.identifier).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        otp = generate_otp()
+        background_tasks.add_task(send_otp_email, data.identifier, otp)
+    else:
+        user = db.query(User).filter(User.phone == data.identifier).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        otp = generate_otp()
+        background_tasks.add_task(send_otp_sms, data.identifier, otp)
+
+    await redis_client.delete(f"otp_attempts:{data.type}:{data.identifier}")
+    return {"message": f"OTP resent to your {data.type}"}
+
+
 @router.post("/verify-otp")
 async def verify_otp(data: OTPVerifyRequest, db: Session = Depends(get_db)):
     key = f"otp:{data.type}:{data.identifier}"
@@ -322,7 +356,13 @@ async def verify_otp(data: OTPVerifyRequest, db: Session = Depends(get_db)):
 
     db.commit()
 
-    return {"message": f"{data.type.capitalize()} verified successfully"}
+    activated = bool(user and user.account_status == AccountStatus.ACTIVE)
+    return {
+        "message": f"{data.type.capitalize()} verified successfully",
+        "email_verified": user.email_verified if user else False,
+        "phone_verified": user.phone_verified if user else False,
+        "account_active": activated,
+    }
 
 @router.post("/login")
 async def login(data: LoginRequest, db: Session = Depends(get_db)):
@@ -369,8 +409,10 @@ async def login(data: LoginRequest, db: Session = Depends(get_db)):
             "id": user.id,
             "full_name": user.full_name,
             "email": user.email,
+            "phone": user.phone,
             "role": user.role.value,
-            "profile_photo": user.profile_photo
+            "account_status": user.account_status.value,
+            "profile_photo": user.profile_photo,
         }
     }
 

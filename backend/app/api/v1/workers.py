@@ -28,12 +28,21 @@ async def get_worker_profile(
 ):
     profile = db.query(WorkerProfile).filter(WorkerProfile.id == current_user.id).first()
     
+    status = (
+        profile.verification_status.value
+        if hasattr(profile.verification_status, "value")
+        else profile.verification_status
+    )
     return {
         "id": profile.id,
         "service_category": profile.service_category,
         "skills": profile.skills,
         "experience_years": profile.experience_years,
-        "verification_status": profile.verification_status,
+        "verification_status": status,
+        "government_id_document": profile.government_id_document,
+        "address_proof_document": profile.address_proof_document,
+        "police_verification_document": profile.police_verification_document,
+        "profile_photo": current_user.profile_photo,
         "working_radius_km": profile.working_radius_km,
         "base_charge_per_hour": profile.base_charge_per_hour,
         "total_jobs_completed": profile.total_jobs_completed,

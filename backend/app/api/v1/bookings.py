@@ -12,7 +12,7 @@ Business rules enforced here:
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 from pydantic import BaseModel
-from datetime import datetime, timezone, timezone
+from datetime import datetime, timezone
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_role
@@ -21,11 +21,134 @@ from app.models.user import User, UserRole
 from app.models.booking import Booking, BookingStatus
 from app.services.ai_service import AIService
 from app.services.notification_service import NotificationService
+from app.utils.realtime import notify_booking_event
 
 router = APIRouter()
 ai_service = AIService()
 notification_service = NotificationService()
 logger = get_logger(__name__)
+
+
+def _format_address(service_address: dict | None) -> str:
+    if not service_address:
+        return "Address not provided"
+    if isinstance(service_address, dict) and service_address.get("full_address"):
+        return str(service_address["full_address"])
+    parts = [
+        service_address.get("address") if isinstance(service_address, dict) else None,
+        service_address.get("city") if isinstance(service_address, dict) else None,
+        service_address.get("pincode") if isinstance(service_address, dict) else None,
+    ]
+    return ", ".join(p for p in parts if p) or "Address not provided"
+
+
+def _can_view_booking(booking: Booking, user: User) -> bool:
+    if user.role == UserRole.ADMIN:
+        return True
+    if booking.customer_id == user.id:
+        return True
+    if booking.worker_id and booking.worker_id == user.id:
+        return True
+    if user.role == UserRole.WORKER and user.id in (booking.ai_recommended_workers or []):
+        return True
+    return False
+
+
+def _serialize_booking_detail(booking: Booking, current_user: User) -> dict:
+    status = booking.status.value if hasattr(booking.status, "value") else booking.status
+    payment_status = (
+        booking.payment_status.value
+        if hasattr(booking.payment_status, "value")
+        else booking.payment_status
+    )
+    is_customer = booking.customer_id == current_user.id
+    is_worker = booking.worker_id == current_user.id
+    return {
+        "id": booking.id,
+        "customer_id": booking.customer_id,
+        "worker_id": booking.worker_id,
+        "service_category": booking.service_category,
+        "service_description": booking.service_description,
+        "problem_description": booking.service_description,
+        "skills_required": booking.skills_required or [],
+        "service_address": booking.service_address,
+        "address": _format_address(
+            booking.service_address if isinstance(booking.service_address, dict) else None
+        ),
+        "preferred_date": booking.preferred_date,
+        "preferred_time_slot": booking.preferred_time_slot,
+        "estimated_duration_hours": booking.estimated_duration_hours,
+        "estimated_price": booking.estimated_price,
+        "final_price": booking.final_price,
+        "status": status,
+        "payment_status": payment_status,
+        "special_instructions": booking.special_instructions,
+        "cancellation_reason": booking.cancellation_reason,
+        "materials_required": booking.materials_required or [],
+        "customer_attachments": booking.customer_attachments or [],
+        "customer": {
+            "id": booking.customer.id,
+            "name": booking.customer.full_name,
+            "email": booking.customer.email if is_worker or current_user.role == UserRole.ADMIN else None,
+            "phone": booking.customer.phone if is_worker or current_user.role == UserRole.ADMIN else None,
+        },
+        "worker": {
+            "id": booking.worker.id,
+            "name": booking.worker.full_name,
+            "phone": booking.worker.phone,
+        }
+        if booking.worker
+        else None,
+        "timeline": {
+            "requested_at": booking.requested_at,
+            "accepted_at": booking.accepted_at,
+            "started_at": booking.started_at,
+            "completed_at": booking.completed_at,
+            "cancelled_at": booking.cancelled_at,
+        },
+        "permissions": {
+            "is_customer": is_customer,
+            "is_worker": is_worker,
+            "is_admin": current_user.role == UserRole.ADMIN,
+            "can_accept": (
+                current_user.role == UserRole.WORKER
+                and status == BookingStatus.REQUESTED.value
+                and booking.worker_id is None
+                and (
+                    not booking.ai_recommended_workers
+                    or current_user.id in booking.ai_recommended_workers
+                )
+            ),
+            "can_decline": (
+                current_user.role == UserRole.WORKER
+                and status == BookingStatus.REQUESTED.value
+                and booking.worker_id is None
+            ),
+            "can_cancel": is_customer
+            and status in (BookingStatus.REQUESTED.value, BookingStatus.ACCEPTED.value),
+            "can_review": is_customer and status == BookingStatus.COMPLETED.value,
+            "can_upload_photos": is_customer
+            and status in (BookingStatus.REQUESTED.value, BookingStatus.ACCEPTED.value),
+        },
+    }
+
+
+def _serialize_booking_summary(b: Booking) -> dict:
+    status = b.status.value if hasattr(b.status, "value") else b.status
+    return {
+        "id": b.id,
+        "service_category": b.service_category,
+        "service_description": b.service_description,
+        "problem_description": b.service_description,
+        "status": status,
+        "preferred_date": b.preferred_date,
+        "preferred_time_slot": b.preferred_time_slot,
+        "estimated_price": b.estimated_price,
+        "service_address": b.service_address,
+        "address": _format_address(b.service_address if isinstance(b.service_address, dict) else None),
+        "requested_at": b.requested_at,
+        "worker_id": b.worker_id,
+    }
 
 
 # ── Request schemas (inline — full schemas in app/schemas/booking.py) ─────────
@@ -40,6 +163,7 @@ class CreateBookingRequest(BaseModel):
     estimated_duration_hours: float = 2.0
     special_instructions: str | None = None
     materials_required: list[str] = []
+    customer_attachments: list[str] = []
 
 
 class UpdateBookingStatusRequest(BaseModel):
@@ -114,6 +238,7 @@ async def create_booking(
         estimated_price=price_estimate["amount"],
         special_instructions=data.special_instructions,
         materials_required=data.materials_required,
+        customer_attachments=data.customer_attachments[:10],
         ai_recommended_workers=[w["worker_id"] for w in recommended_workers[:5]],
         ai_price_confidence=price_estimate["confidence"],
         fraud_detection_score=fraud_score,
@@ -130,6 +255,13 @@ async def create_booking(
             booking_id=booking.id,
             service_category=data.service_category,
         )
+
+    await notify_booking_event(
+        booking.id,
+        "BOOKING_CREATED",
+        f"New {data.service_category} booking created",
+        customer_id=current_user.id,
+    )
 
     return {
         "booking_id": booking.id,
@@ -169,17 +301,43 @@ async def get_my_bookings(
     )
 
     return {
-        "items": [
-            {
-                "id": b.id,
-                "service_category": b.service_category,
-                "status": b.status,
-                "preferred_date": b.preferred_date,
-                "estimated_price": b.estimated_price,
-                "requested_at": b.requested_at,
-            }
-            for b in bookings
-        ],
+        "items": [_serialize_booking_summary(b) for b in bookings],
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": max(1, (total + page_size - 1) // page_size),
+    }
+
+
+@router.get(
+    "/available",
+    summary="List available booking requests for workers",
+    description="Returns unassigned REQUESTED bookings recommended for the current worker.",
+)
+async def get_available_bookings(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    current_user: User = Depends(require_role([UserRole.WORKER])),
+    db: Session = Depends(get_db),
+):
+    query = (
+        db.query(Booking)
+        .filter(Booking.status == BookingStatus.REQUESTED, Booking.worker_id.is_(None))
+        .order_by(Booking.requested_at.desc())
+    )
+    all_requested = query.all()
+    worker_id = current_user.id
+    filtered = [
+        b
+        for b in all_requested
+        if not b.ai_recommended_workers or worker_id in (b.ai_recommended_workers or [])
+    ]
+    total = len(filtered)
+    start = (page - 1) * page_size
+    page_items = filtered[start : start + page_size]
+
+    return {
+        "items": [_serialize_booking_summary(b) for b in page_items],
         "page": page,
         "page_size": page_size,
         "total": total,
@@ -206,40 +364,10 @@ async def get_booking_details(
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
 
-    if booking.customer_id != current_user.id and booking.worker_id != current_user.id:
-        if current_user.role != UserRole.ADMIN:
-            raise HTTPException(status_code=403, detail="Not authorized to view this booking")
+    if not _can_view_booking(booking, current_user):
+        raise HTTPException(status_code=403, detail="Not authorized to view this booking")
 
-    return {
-        "id": booking.id,
-        "service_category": booking.service_category,
-        "service_description": booking.service_description,
-        "skills_required": booking.skills_required,
-        "service_address": booking.service_address,
-        "preferred_date": booking.preferred_date,
-        "preferred_time_slot": booking.preferred_time_slot,
-        "estimated_price": booking.estimated_price,
-        "final_price": booking.final_price,
-        "status": booking.status,
-        "payment_status": booking.payment_status,
-        "customer": {
-            "id": booking.customer.id,
-            "name": booking.customer.full_name,
-            "phone": booking.customer.phone if booking.worker_id == current_user.id else None,
-        },
-        "worker": {
-            "id": booking.worker.id,
-            "name": booking.worker.full_name,
-            "phone": booking.worker.phone,
-        } if booking.worker else None,
-        "timeline": {
-            "requested_at": booking.requested_at,
-            "accepted_at": booking.accepted_at,
-            "started_at": booking.started_at,
-            "completed_at": booking.completed_at,
-            "cancelled_at": booking.cancelled_at,
-        },
-    }
+    return _serialize_booking_detail(booking, current_user)
 
 
 @router.post(
@@ -263,8 +391,9 @@ async def accept_booking(
             detail=f"Booking cannot be accepted — current status is '{booking.status.value}'.",
         )
 
-    # Business rule: worker must be in the recommended list
-    if current_user.id not in (booking.ai_recommended_workers or []):
+    # Business rule: worker must be in the recommended list when recommendations exist
+    recommended = booking.ai_recommended_workers or []
+    if recommended and current_user.id not in recommended:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You were not recommended for this booking.",
@@ -282,6 +411,13 @@ async def accept_booking(
     )
 
     logger.info("Booking %s accepted by worker %s", booking_id, current_user.id)
+    await notify_booking_event(
+        booking.id,
+        "BOOKING_UPDATE",
+        f"Worker {current_user.full_name} accepted your booking",
+        customer_id=booking.customer_id,
+        worker_id=current_user.id,
+    )
     return {"message": "Booking accepted successfully", "booking_id": booking.id}
 
 
@@ -341,4 +477,12 @@ async def update_booking_status(
 
     db.commit()
     logger.info("Booking %s status → %s by %s", booking_id, data.status, current_user.id)
-    return {"message": "Status updated successfully", "new_status": booking.status}
+    new_status = booking.status.value if hasattr(booking.status, "value") else booking.status
+    await notify_booking_event(
+        booking.id,
+        "BOOKING_UPDATE",
+        f"Booking status updated to {new_status}",
+        customer_id=booking.customer_id,
+        worker_id=booking.worker_id,
+    )
+    return {"message": "Status updated successfully", "new_status": new_status}
