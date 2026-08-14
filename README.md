@@ -13,7 +13,7 @@
 
 Homeezy is an innovative on-demand home services platform designed to revolutionize how urban dwellers maintain their living spaces. Built using the MERN stack (MongoDB, Express.js, React, Node.js), Homeezy connects homeowners with verified service professionals for various home maintenance and improvement tasks.
 
-![HOMEEZY](https://raw.githubusercontent.com/Agarwalyash14/Genie/main/client/public/main_page.jpeg)
+![HOMEEZY](./client/public/main_page.jpeg)
 
 ## 🌟 Key Features
 
